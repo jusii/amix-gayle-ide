@@ -1,5 +1,12 @@
 # amix-gayle-ide — native Amix IDE driver for the Amiga 4000's onboard Gayle port
 
+> **Fork notice.** This is the amigaux.org workspace's working fork of
+> [hmlio/amix-gayle-ide](https://github.com/hmlio/amix-gayle-ide) by Emre Bastuz, adopted 2026-09-29
+> for the v1.1 installer line (`upstream` = his repository, `origin` = this fork). Changes here keep
+> his layout and naming, one topic per commit, and are meant to go back upstream once the driver is
+> tested and integrated on the current `amix-kerntools` hub; until then this fork is the working copy.
+> The 2026-09-29 section of [`CHANGELOG.md`](CHANGELOG.md) lists what differs from upstream.
+
 A native **Amiga UNIX (Amix 2.1, Commodore's SVR4.0 port to the 68030 Amiga)** driver for the
 **Gayle IDE controller** built into the Amiga 4000 (the board table also carries untested A1200/A600
 rows), so that Amix runs on an **unmodified A4000 with a 68030 CPU card** — no SCSI host adapter needed,
