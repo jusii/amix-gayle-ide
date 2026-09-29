@@ -2,6 +2,8 @@
 
 ## 2026-09-29 (amigaux.org fork)
 
+- **README:** the boot-time page-cross line is sdpart's static RDB buffer, not a driver defect (f130a69).
+
 - **Kernel patches:** `support.c.patch` dropped — the A3000 SCSI auto-detection patch is
   `amix-a4091`'s (with the Agnus-id low-nibble gate) and the build hub applies it to every kernel.
   `kernel.c.patch` regenerated against stock `master.d/kernel.c` so it applies at zero fuzz.
