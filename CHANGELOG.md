@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-02 — 68040/68060 build variant; ATAPI CD-ROM (d19812b, 70e768e)
+
+- **68040/68060 build** (`-DIDE_CACHE=1 -DIDE_NBPP=4096`): data-cache push/invalidate around every PIO buffer, a
+  nop ordering barrier before task-file reads, an attach-time DTT0/DTT1 cache-inhibit check, spin budgets x4,
+  the `ide_spins_hw` high-water counter; polled-only interrupt shape on the KD line documented; the banner no
+  longer divides by 2048. Host harness runs both builds (811 + 1046 checks).
+- **ATAPI CD-ROM:** detection by signature and IDENTIFY PACKET DEVICE, CDB passthrough as PACKET commands
+  (polled and interrupt-driven), the drive's own sense for REQUEST SENSE, READ(6)/WRITE(6) -> (10), overrun
+  drain; `ide_slave_enable` 2 attaches an ATAPI slave only (default 0 unchanged). Mock ATAPI drive in the
+  harness (1197 + 1511 checks). Emulator: K030-U-CD mounts an ATAPI CD on the Gayle slave via cdfs, 22/22
+  files byte-identical over 5 rounds, including under CF write load.
+
 ## 2026-09-29 (amigaux.org fork)
 
 - **README:** a run-level change requested over telnet while the console sits at `login:` stalls in stock
