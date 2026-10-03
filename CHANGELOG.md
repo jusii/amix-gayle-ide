@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-03 — ATAPI polled commands end only in the status phase (e2c7122..32c0420)
+
+A polled PACKET command is complete only when the status phase is reached; carried into the KT-40 carriers.
+
 ## 2026-10-02 — 68040/68060 build variant; ATAPI CD-ROM (d19812b, 70e768e)
 
 - **68040/68060 build** (`-DIDE_CACHE=1 -DIDE_NBPP=4096`): data-cache push/invalidate around every PIO buffer, a
