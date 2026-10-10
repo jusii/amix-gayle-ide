@@ -50,8 +50,10 @@ login works. To my knowledge the first Amix boot on an A4000 with root on IDE.
   only, LBA28, LUN 0 only.
 - 🟡 **ATAPI CD-ROM** — an ATAPI device (detected by its signature, then IDENTIFY PACKET DEVICE) gets
   the caller's CDBs as PACKET commands: INQUIRY, READ CAPACITY, READ(10), REQUEST SENSE are the
-  drive's own answers, so `amix-cdfs` mounts it like a SCSI CD-ROM (see Hardware notes). Host
-  harness only so far; the emulator cell is next.
+  drive's own answers, so a cdfs-capable kernel mounts it like a SCSI CD-ROM (see Hardware notes).
+  Host harness, Amiberry (68030 and 68060), and a real drive on an A4000 (68060, polled): a 287 MB
+  data CD reads intact, also with the IDE master busy. Interrupt-mode ATAPI is not yet run on
+  hardware.
 - ✅ **Interrupt-driven I/O** `ideintr()` — level-2 handler hooked into `int2_tbl[]` by
   `kernel.c.patch`, one interrupt per sector, `timeout()` watchdog; falls back to polled I/O on an
   unpatched kernel. Emulation: 107k interrupts, 2 spurious, 0 timeouts; 10 MB raw read 3.4 s → 0.7 s sys.
@@ -143,7 +145,7 @@ make -C test/host check      # both variants; exit 0 == every check passed
   so nothing needs splitting; the counter exists for raw I/O from user pages, where the second page is
   not guaranteed to follow the first.
 - **ATAPI CD-ROM.** On the slave with `ide_slave_enable` 2 (or 1) it is SCSI unit 5 of the IDE
-  card; with an `amix-cdfs` kernel, `mount -F cdfs <card>,5 /cdrom` mounts it (card 0 where the IDE
+  card; with a cdfs-capable kernel, `mount -F cdfs <card>,5 /cdrom` mounts it (card 0 where the IDE
   port is the only controller, card 1 below the Z3660 on the 68040/68060 line). Every CDB
   goes to the drive as a 12- (or 16-) byte packet; only READ(6)/WRITE(6), which MMC drives lack,
   become READ(10)/WRITE(10). A CHECK CONDITION leaves the drive's own sense for the next REQUEST
