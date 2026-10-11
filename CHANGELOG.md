@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-11 — real-hardware docs: VPOSR id, the 040/060 line, ATAPI CD read (880ec5c..815e182)
+
+VPOSR id 0x23 confirmed on a real PAL A4000; the 68040/68060 line on a real A4000 with a Z3660 060; an ATAPI CD-ROM
+read on real hardware. PR branches pr/1..7 carry the upstream series with the A4000D evidence (R1..R7).
+
 ## 2026-10-03 — ATAPI polled commands end only in the status phase (e2c7122..32c0420)
 
 A polled PACKET command is complete only when the status phase is reached; carried into the KT-40 carriers.
