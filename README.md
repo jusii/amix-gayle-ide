@@ -202,9 +202,9 @@ driver's.
 
 **On hardware** (2026-10-10): an A4000 with a Z3660 in real 68060 mode, an SD-to-CF adapter as
 master and an ATAPI DVD-RAM as slave. DTT0 reads `0x003FC060` (`ide_ci_ok` 1); 64 MB raw reads repeat
-with equal checksums (~465 KB/s); writes read back intact (~0.65 MB/s); `ide_spins_hw` 2765; Amix
-boots with root and swap on the IDE disk. With CD and disk I/O back to back, logins can stall for a
-minute or two: the IPL 2 hold described above.
+with equal checksums; writes read back intact; `ide_spins_hw` 2765; Amix boots with root and swap on
+the IDE disk. With CD and disk I/O back to back, logins can stall for a minute or two: the IPL 2 hold
+described above.
 
 ## Sharing a kernel with a SCSI host adapter
 
