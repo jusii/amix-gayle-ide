@@ -95,6 +95,14 @@ CHANGELOG.md
 The `sd.c` `scsicard[]` rows and the alien `Makefile` `OBJ` entry are **not** here — amix-kerntools
 generates them from `driver.conf`.
 
+## Requirements
+
+- An Amiga 4000 or 4000T, whose Gayle IDE port sits at `0xDD2020` (the A1200/A600 rows are untested,
+  see Status).
+- 68030 **with a 68881/68882 FPU** (the stock Amix kernel has no software floating point; without an
+  FPU it panics in the kernel at the first signal delivery, seconds after `no fpu detected`). For a
+  68040/68060 see [The 68040/68060 kernel line](#the-6804068060-kernel-line).
+
 ## Building
 
 This repo is **source only**. With [`amix-kerntools`](https://github.com/jusii/amix-kerntools)
@@ -217,6 +225,13 @@ refused with `sd: too many controllers`. This driver does not arbitrate that: th
 hub ships the IDE driver in an IDE-rooted kernel of its own and registers the port only when it is
 the sole controller. A hand-assembled shared kernel must decide which controller roots, or leave the
 IDE disk unplugged. The slave, when enabled, appears as unit 5 (`ide_slave_unit`).
+
+## Troubleshooting
+
+- `PANIC: KERNEL FAULT … pc=<kernel base>+0x12A, vector=0xB (Line-F Emulator)` in pid 1 right after
+  the copyright block, with `no fpu detected` above → the CPU card has no FPU. Not the IDE driver, not
+  Kickstart, not RAM. Fit an FPU (or `fpu_model=68882` in the emulator). FPU-less 030 support is
+  planned for a later release.
 
 ## License
 
