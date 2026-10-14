@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-14 — README: requirements and troubleshooting (3f81e8e)
+
+68030 needs a 68881/68882: the stock kernel panics at the first signal without one (`sendsig` → `fpu_setup` FRESTORE,
+pc = load base + 0x12A, vector 0xB in pid 1), as a tester's FPU-less A1200 card showed. Triage line added.
+
 ## 2026-10-11 — real-hardware docs: VPOSR id, the 040/060 line, ATAPI CD read (880ec5c..815e182)
 
 VPOSR id 0x23 confirmed on a real PAL A4000; the 68040/68060 line on a real A4000 with a Z3660 060; an ATAPI CD-ROM
