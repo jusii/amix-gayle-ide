@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-27 — docs: the plan for the root-class kernel module port (1820e85, 4918016)
+
+docs/module-form.md (2026-10-21, what the driver needs as a loadable module) and docs/MODULE-PORT.md (the plan under the
+amix-dlm contracts C4-2 v3, C4-1 v2, C4-5 v2, C3-5 v8, C3-6 v4; it wins where the two differ). Probe: the VPOSR AGA gate,
+a bprobe-guarded ALTSTAT read at 0xDD303A, the task-file readback; 0xDE1000 never touched. sd_register rank ide; INT2 via
+root_defer with a READ VERIFY self-test (an INTREQ software raise cannot pass on the A4000); _halt sets nIEN (the A4000 row has
+no Gayle INTENA); no DMA calls. Packages gayle-k30/-k46 (gayle30/gayle46). The A4000T has the same task file at 0xDD2020 and
+passes the gate: with no drive the module returns ENXIO. Seven open questions for dlm in §7. Docs only; harness 1253/1576 pass.
+
 ## 2026-10-14 — README: requirements and troubleshooting (3f81e8e)
 
 68030 needs a 68881/68882: the stock kernel panics at the first signal without one (`sendsig` → `fpu_setup` FRESTORE,
