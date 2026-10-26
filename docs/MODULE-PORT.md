@@ -1,8 +1,10 @@
 # Porting the driver to a root-class kernel module: the plan
 
-Date: 2026-10-27. Status: plan, no code yet. It applies amix-dlm's contracts to this driver:
-C4-2 v3 (root-class driver), C4-1 v2 (`sd_register`, four cards), C4-5 v2 (DMA), C3-6 v4 (driver to
-module), C3-5 v8 (package), and the DDI list (`amix-dlm/docs/abi/ddi.md`, `abi/<line>/ddi.list`).
+Date: 2026-10-27. Status: implemented the same day (`src/ide.c` under `-DIDE_MODULE`, `module/`,
+`test/host/ide_modtest.c`; README "The loadable module"), with amix-dlm's answers to §7. It applies
+amix-dlm's contracts to this driver:
+C4-2 v3 (root-class driver), C4-1 v2 (`sd_register`, four cards), C4-5 v2 (DMA), C3-6 v5 (driver to
+module), C3-5 v9 (package), and the DDI list (`amix-dlm/docs/abi/ddi.md`, `abi/<line>/ddi.list`).
 The shape follows the first root-class disk module, amix-z3660scsi (`module/`, `src/z3660.c` under
 `-DZ3660SCSI_MODULE`). Where this plan and [`module-form.md`](module-form.md) (written before the
 contracts) differ, this plan wins: the rank is a class, not a sort key; interrupts attach late, not
@@ -53,13 +55,13 @@ object stays byte for byte as it is (z3660scsi's rule). A new `module/` director
 6. Attach in `_load`, not lazily: the polled IDENTIFY of both drives, bounded spins, no
    `lbolt`/`timeout`. Then `sd_register(idequeue, 0, (char *)0xDD2020, "A4000 IDE", 4)`. Its errno
    (`EBUSY`/`EINVAL`/`ENOSPC`) is printed and returned (C4-1 §3, `C4-1:121-145`).
-7. If `intr` is set, call `root_defer(ide_defer, 0)`.
+7. If `intr` is set, call `root_defer(gayle_defer, 0)`.
 
 Note on context. sd's first open (`rth1_apply`) runs while the root pass is still active, and
 `idequeue()`'s `sdspl()` bracket (`:1718`) moves the level from 7 to 2 and back. The static driver
 does exactly the same at that point today, and z3660scsi's `spl6` does the same.
 
-**`ide_defer(arg)`** runs at the first `sysinit`, process context, level 0 (C4-2 §3, `:70-94`):
+**`gayle_defer(arg)`** runs at the first `sysinit`, process context, level 0 (C4-2 §3, `:70-94`):
 1. `intr_attach(2, ide_intr2, 0, "gayle")`. `ide_intr2` wraps `ideintr()` (`:1583`) and returns
    nonzero only when the driver claimed the interrupt, as C3-6 §1.3 requires.
 2. **Self-test.** A software raise of `INTREQ` cannot set the A4000's INTRQ mirror (`0xDD3020` bit 7,
@@ -91,13 +93,13 @@ the static form).
 | Name | Minor | Where it is used |
 |---|---|---|
 | `printf`, `bprobe`, `spl2`, `splx` | 0 | `_load` (`bprobe` is in C4-2 §2's root list; the root-context check for it must pass on both lines before the module ships) |
-| `intr_attach`, `intr_detach`, `timeout`, `sleep`, `wakeup` | 0 | `ide_defer` and the interrupt path, level 0 and up |
+| `intr_attach`, `intr_detach`, `timeout`, `sleep`, `wakeup` | 0 | `gayle_defer` and the interrupt path, level 0 and up |
 | `sd_register` | 1 | `_load` |
 | `root_defer` | k46.1.1, **k30.1.2** | `_load` |
 
-So the k46 module builds against kabi `k46.1.1`. The k30 module needs `k30.1.2`, which is still open
-(`abi/README.md`): it can be built now but not shipped before a k30.1.2 kernel exists. The cache
-line operations are inline opcodes (`:348-350`) and import nothing.
+The module needs **kabi 1.2 on both lines**: it is built with the kits `k30.1.2` and `k46.1.2`
+(amix-dlm `bbd20b6`), and runs on the kernels of those minors (`kern30m` -13 and `kern46m` -78 when
+they are minted). The cache line operations are inline opcodes (`:348-350`) and import nothing.
 
 **DMA: none (C4-5).** The Gayle IDE has no bus master: every byte moves by CPU PIO through the
 task-file data register (`ide_pio_in`/`ide_pio_out`, `:712-745`). The board never holds an address
@@ -132,7 +134,7 @@ identity.
 | | k30 (68030) | k46 (68040/68060) |
 |---|---|---|
 | Flags | as the static `ide.o` | `-DIDE_CACHE=1 -DIDE_NBPP=4096`; spin budgets ×4 (`:256-262`) |
-| kabi | `k30.1.2` (`root_defer`) | `k46.1.1` |
+| kabi | `k30.1.2` | `k46.1.2` |
 | Interrupt path | proven on a real A4000/030 and in emulation (README "Status") | **never run**: the static line was polled only. `intr=1` there is new code |
 | Register cache check | none | `ide_ci_check()` at attach (`:438-457`): the arena runs through DTT0 like the static drivers (C4-2 §6) |
 | Root-pass level | 7 on both (C4-2 §2) | same |
@@ -144,7 +146,9 @@ identity.
 | gayle | `gayle` | `gayle30` / `gayle46` | `gayle-k30` / `gayle-k46` | `module/VERSION`, `1.1.0-1` |
 
 The package ships `/etc/conf/mod.d/gayle` and `/etc/conf/modreg.d/gayle`. It ships no device nodes,
-because sd owns the disk majors. The row goes into C3-5 at its next version.
+because sd owns the disk majors. C3-5 v9 §1.1 carries the row (`gayle | gayle | gayle30 / gayle46`).
+The package's `modreg.d/gayle` ships with interrupts off on both lines; turning them on is the line
+`param intr=1` there (C3-5 §1's `param <pname>=<value>`) and a package version bump.
 
 ## 6. Test plan
 
@@ -168,7 +172,23 @@ because sd owns the disk majors. The row goes into C3-5 at its next version.
 3. **Real hardware, after emulation:** an A4000 with a 060 card (polled, then the first `intr=1`
    run on 040/060), and on a 68030 for the interrupt path.
 
-## 7. Open questions for amix-dlm
+## 7. Questions for amix-dlm, answered
+
+amix-dlm accepted all seven recommendations (contracts C3-5 v9 and C3-6 v5), with these amendments,
+which the code follows:
+- **1:** the module default is 0. The switch is the package's `modreg.d/gayle` line `param intr=1`
+  (not `gayle.intr`), and it ships off on both lines for now.
+- **2:** the proof is that no module path accesses `0xDE1000`: a host test sums the mock's Gayle ID
+  reads and writes over every case, and `make -C module` scans each linked module for the constant.
+- **3:** the readback is the registered `mobo:gayle` identifying probe, allowed only after the VPOSR
+  gate and the `bprobe` guard of ALTSTAT `0xDD303A`, in that order; parameter registers only.
+- **4:** `bprobe` at level 7 with the clock stopped is amix-dlm's root-context row (S4-71, C4-2 §2).
+  The module is built and emulated meanwhile; shipping waits on that row.
+- **5:** `ENXIO`, silent and unlinked, bounded by the static driver's own spin budget.
+- **6:** `_halt` masks (nIEN) only; no flush in v1.
+- **7:** the counters are global symbols, so `getksym` finds them (`ideunits` too in the module).
+
+The questions as they were put:
 
 1. **`intr` default.** C3-6 §1.3 keeps polled as the default, and the §8 row says INT2 through
    `root_defer`. *Recommend:* the module default is 0; the k30 package's `modreg.d` sets

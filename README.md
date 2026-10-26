@@ -87,8 +87,9 @@ src/ide.c                 the driver: register map, board table, probe, SCSI→A
 src/kernel-patches/       kernel.c.patch  -- ideintr into int2_tbl[] (master.d/kernel.c)
                           NOTICE          -- diffs only, not Amix source; the support.c patch
                                              (phantom A3000 SCSI removal) comes from amix-a4091
+module/                   the loadable module form: Makefile (ABI kit), Master, VERSION
 test/host/                host harness: mock Gayle/ATA, kernel stubs, tests (make check)
-docs/                     decision record, VPOSR AGA-gate finding
+docs/                     decision record, VPOSR AGA-gate finding, the module port plan
 CHANGELOG.md
 ```
 
@@ -127,6 +128,48 @@ The host harness needs only a C compiler:
 ```sh
 make -C test/host check      # both variants; exit 0 == every check passed
 ```
+
+## The loadable module
+
+The same source, built with `-DIDE_MODULE`, is `gayle`: a root-class loadable kernel module for
+Amix kernels with amix-dlm's module core. The core loads it before the root is mounted, and it
+registers the port with sd by itself, so no `driver.conf` row, kernel patch or relink is needed.
+Without the switch `src/ide.c` is the static driver, byte for byte (`make -C module static` prints
+the static objects' sums: 68030 `af0ef514…`, 68040/68060 `bdcd9072…`). The plan and the reasons are
+in [`docs/MODULE-PORT.md`](docs/MODULE-PORT.md).
+
+```sh
+make -C module          # build/k30/mod.d/gayle and build/k46/mod.d/gayle, checked by the kit
+make -C module k30      # one line (or k46)
+make -C module static   # the static objects compiled against the kits, and their sha256
+make -C module clean
+```
+
+It is built with amix-dlm's ABI kits, **kabi 1.2 on both lines** (`k30.1.2`, `k46.1.2`): `DLM=` names
+an amix-dlm checkout with built kits (default `../amix-dlm`), or `KIT_k30=` / `KIT_k46=` name the kits.
+The pinned cross tools (`m68k-cbm-sysv4-*`) and `python3` must be on `PATH`. Each build ends with the
+kit's `modcheck` line (`ok (k30.1.2, root, …)`, `ok (k46.1.2, root, …)`) and a scan that the module
+holds no `0xDE1000`.
+
+| | |
+|---|---|
+| `.moddata` | `name=gayle`, `class=root`, `match=mobo:gayle`, `rank=ide`, `unload=never`, no `majors` (sd owns the disk majors); `cpu` and `kabi` from the kit |
+| Parameters | `intr` (0: polled, the default; 1: interrupts after a self-test), `slave` (0/1/2 as `ide_slave_enable`), `debug` (0–2), `master` (6) and `slaveunit` (5), the SCSI unit numbers |
+| Load | VPOSR AGA gate, then `bprobe` of the alternate status register `0xDD303A`, then the task-file write/readback (parameter registers only, no command); polled IDENTIFY; `sd_register(idequeue, 0, 0xDD2020, "A4000 IDE", 4)`. No drive, or no Gayle: `ENXIO`, silently, and no card is taken |
+| Interrupts | with `intr=1`, at the first `sysinit`: `intr_attach` at level 2 and a self-test by one READ VERIFY SECTOR(S); polled if it fails |
+| Halt | sets nIEN; no flush |
+| Not in the module | the A1200/A600 rows (the Gayle ID register `0xDE1000` is never touched), the `int2_tbl` search, `idepresent()` |
+
+The package ships the module with interrupts off on both lines; its `/etc/conf/modreg.d/gayle` line
+`param intr=1` turns them on. The counters (`ide_spins_hw`, `ide_resets`, `ide_intr_*`, `ideunits`, …)
+are global symbols of the module, so `getksym` finds them at the module's load address.
+
+**Not tested yet:**
+- the module has run only in the host harness (`make -C test/host check`), not in an emulator or on
+  hardware; the A4000 rows on the emulator come first, then real hardware;
+- the interrupt path has never run on a 68040/68060 kernel: the static driver there is polled only;
+- `bprobe` in the root pass (level 7, the clock stopped) waits on amix-dlm's root-context check
+  (C4-2 §2); the module must not ship before that check passes on both lines.
 
 ## Hardware notes
 
@@ -225,6 +268,9 @@ refused with `sd: too many controllers`. This driver does not arbitrate that: th
 hub ships the IDE driver in an IDE-rooted kernel of its own and registers the port only when it is
 the sole controller. A hand-assembled shared kernel must decide which controller roots, or leave the
 IDE disk unplugged. The slave, when enabled, appears as unit 5 (`ide_slave_unit`).
+
+The loadable module (above) changes this: sd orders controllers by class, and the IDE port comes
+last, so beside one SCSI adapter it is card 1 (`ced0`), and the root is found by identity.
 
 ## Troubleshooting
 
