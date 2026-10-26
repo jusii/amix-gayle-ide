@@ -50,6 +50,14 @@
  *    (synthesised commands, polled path).  A small FIFO flattens the dd.c
  *    completion -> startio -> sdqueue re-entry into iteration.
  *
+ * Built with -DIDE_MODULE the same source is the root-class loadable kernel
+ * module `gayle' (the section at the end of this file; module/ and
+ * docs/MODULE-PORT.md): the module probes and attaches in its load entry,
+ * registers with sd_register(), and attaches its interrupt later through
+ * intr_attach() after a self-test.  The int2_tbl[] search, the sd.c probe
+ * hook idepresent() and the A1200/A600 rows are not in the module.  Without
+ * the switch this file is the static driver, byte for byte.
+ *
  * BOARD ABSTRACTION: every board-specific address and interrupt convention is
  * confined to `struct ideboard' and the ide_irq_*() / ide_detect() helpers
  * below.  The rest of the driver sees a task-file base and three interrupt
@@ -69,7 +77,9 @@
 
 extern int	printf();
 extern int	timeout();
+#ifndef IDE_MODULE
 extern void	(*int2_tbl[])();	/* master.d/kernel.c, NULL terminated */
+#endif
 
 /*
  * ---- Register map and constants (kept in this file: amix-kerntools ships one
@@ -269,7 +279,9 @@ int	ide_slave_enable = 0;		/* 0: never touch the slave (FlashAir rule),
 					 * 1: attach whatever answers there,
 					 * 2: attach it only if it is an ATAPI device (a CD-ROM) */
 int	ide_intr_enable  = 1;		/* 0: force polled I/O even if hooked */
+#ifndef IDE_MODULE
 int	ide_board_force  = 0;		/* 0 auto-detect (A4000 only), 1.. = ideboards[] index+1, -1 = never probe */
+#endif
 ulong	ide_timeout_secs = 20;		/* watchdog for an interrupt-driven command */
 ulong	ide_spins_atapi = 20000000L * IDE_SPIN_SCALE;	/* polled ATAPI phase wait (spin-up, seek) */
 int	ide_debug        = 0;		/* 0 quiet, 1 attach/errors, 2 every command */
@@ -492,8 +504,10 @@ struct ideboard {
 
 static struct ideboard	ideboards[] = {
 	{ "A4000 IDE", 0xDD2020L, 0xDD3020L, 0L,        0L,        0x00, 1 },
+#ifndef IDE_MODULE	/* the module knows the A4000 row only: no 0xDE1000 access */
 	{ "A1200 IDE", 0xDA0000L, 0xDA9000L, 0xDA9000L, 0xDAA000L, 0xD1, 1 },
 	{ "A600 IDE",  0xDA0000L, 0xDA9000L, 0xDA9000L, 0xDAA000L, 0xD0, 0 },
+#endif
 };
 #define IDE_NBOARDS	((int)(sizeof ideboards / sizeof ideboards[0]))
 #define IDE_GAYLE_ID	0xDE1000L
@@ -550,6 +564,7 @@ int		on;
 	}
 }
 
+#ifndef IDE_MODULE
 static uint
 ide_gayle_id()
 {
@@ -562,6 +577,7 @@ ide_gayle_id()
 		v = (v << 1) | ((RB( IDE_GAYLE_ID) >> 7) & 1);
 	return v;
 }
+#endif	/* !IDE_MODULE */
 
 /* ------------------------------------------------------------ unit state */
 
@@ -584,10 +600,17 @@ struct ideunit {
 	uchar	laststat;		/* last ATA status register value */
 };
 
+#ifdef IDE_MODULE
+struct ideunit		ideunits[IDE_NDRIVES];	/* global: getksym finds the per-unit counters */
+#else
 static struct ideunit	ideunits[IDE_NDRIVES];
+#endif
 static int		ide_state;	/* 0 unprobed, 1 no controller, 2 present */
 static int		ide_attached;	/* attach() done */
 static int		ide_use_intr;	/* attach(): ideintr is in int2_tbl[] and enabled */
+#ifdef IDE_MODULE
+static int		ide_st_armed;	/* gayle_defer(): the self-test's command is out */
+#endif
 
 /* interrupt-path bookkeeping (kmem-readable) */
 ulong	ide_intr_count, ide_intr_spurious, ide_intr_timeouts;
@@ -870,6 +893,7 @@ int	drive;
 		(int)u->nsectors, (int)(u->nsectors / ide_secs_per_mb));
 }
 
+#ifndef IDE_MODULE
 /* Is ideintr in the kernel's level-2 table?  (NULL-terminated, kernel.c.) */
 static int
 ide_hooked()
@@ -882,6 +906,7 @@ ide_hooked()
 			return 1;
 	return 0;
 }
+#endif	/* !IDE_MODULE */
 
 static void
 ide_attach()
@@ -899,6 +924,7 @@ ide_attach()
 			ide_attach_unit( drive);
 		else
 			ideunits[drive].present = FALSE;
+#ifndef IDE_MODULE
 	if (ide_intr_enable && ide_hooked()) {
 		ide_use_intr = 1;
 		ide_irq_enable( ide_bd, 1);
@@ -906,6 +932,9 @@ ide_attach()
 	} else
 		ide_irq_enable( ide_bd, 0);
 	printf( "ide: %s, %s I/O\n", ide_bd->name, ide_use_intr ? "interrupt" : "polled");
+#else	/* the module: polled until its deferred self-test passes (gayle_defer) */
+	ide_irq_enable( ide_bd, 0);
+#endif
 }
 
 /*
@@ -1159,7 +1188,9 @@ static void	ide_start();
 static void	ide_watchdog();
 static void	ide_watch_arm();
 static void	ide_reset_drive();
+#ifndef IDE_MODULE
 int		idepresent();
+#endif
 
 /* Is cp on the cable or waiting for it?  (dd.c can hand us the same sdcom
  * twice: its completion routine calls iodone() before it starts the next
@@ -1590,6 +1621,9 @@ ideintr()
 	ide_irq_ack( ide_bd);			/* and at the Gayle latch, where there is one */
 	ide_intr_count++;
 	if (ide_active == 0) {			/* polled command's leftover, or noise */
+#ifdef IDE_MODULE
+		if (!ide_st_armed)		/* not the self-test's READ VERIFY */
+#endif
 		ide_intr_spurious++;
 		return;
 	}
@@ -1723,10 +1757,12 @@ struct sdcom	*cp;
 		splx( s);
 		return TRUE;
 	}
+#ifndef IDE_MODULE
 	if (ide_state == 0) {			/* sd.c probes first; be robust anyway */
 		char	*pa;
 		(void) idepresent( &pa);
 	}
+#endif
 	if (ide_state == 2 && !ide_attached)
 		ide_attach();
 	ide_cache_push( (ulong)cp->addr, (ulong)cp->nbyte);	/* before the CPU reads or fills it */
@@ -2008,6 +2044,7 @@ struct ideboard	*bd;
  * confirmed at 0xDE1000 -- the one place that register is ever read -- and
  * the readback still has to succeed.  -1 keeps the driver from probing at all.
  */
+#ifndef IDE_MODULE
 static struct ideboard *
 ide_detect()
 {
@@ -2060,6 +2097,7 @@ char	**ap;
 	*ap = (char *)ide_bd->base;
 	return 1;
 }
+#endif	/* !IDE_MODULE */
 
 /*
  * Forget the probe and attach results so the next idepresent()/idequeue()
@@ -2080,3 +2118,264 @@ idereset()
 	for (i = 0; i < IDE_NDRIVES; ++i)
 		ideunits[i].present = FALSE;
 }
+
+#ifdef IDE_MODULE
+/* ----------------------------------------------------------------------------
+ * The root-class module form: the loadable kernel module `gayle' (amix-dlm
+ * contracts C4-2 version 3, C4-1 version 2, C3-6 version 5; docs/MODULE-PORT.md).
+ * Built with -DIDE_MODULE once per kernel line (k30; k46 with -DIDE_CACHE=1
+ * -DIDE_NBPP=4096); module/Master gives the .moddata keys: class=root,
+ * match=mobo:gayle, rank=ide, unload=never, no majors (sd owns the disk
+ * majors).
+ *
+ * gayle_load() runs in the module core's root pass: process 0, before the root
+ * is mounted, at LEVEL 7 WITH THE CLOCK STOPPED.  So it sleeps on nothing,
+ * sets no timeout, waits for no interrupt, allocates nothing (the driver's
+ * state is its own .data/.bss) and every wait is a bounded spin.  In order:
+ *   1. the parameters (defaults: polled, no slave, units 6 and 5);
+ *   2. the chipset gate: one VPOSR read; anything but AGA Alice is ENXIO
+ *      after that single read (an A3000 is never touched further);
+ *   3. the guard: bprobe() reads the alternate status register (0xDD303A),
+ *      which has no side effect; a bus error is ENXIO;
+ *   4. the identifying probe registered as mobo:gayle: the task-file
+ *      write/readback of the parameter registers (nIEN, SDH, NSECT/SECT), no
+ *      command; open bus or no drive is ENXIO;
+ *   5. the attach: polled IDENTIFY of the master (and the slave if `slave'
+ *      asks for it); no drive that answers it is ENXIO as well;
+ *   6. sd_register(idequeue, 0, 0xDD2020, "A4000 IDE", 4);
+ *   7. with intr=1, root_defer(gayle_defer, 0).
+ * ENXIO is silent and leaves nothing behind: an empty A4000T port takes no
+ * card.  The Gayle ID register at 0xDE1000 lies in Gary space on the A3000
+ * and A4000 and is never touched: the module has no A1200/A600 rows.
+ *
+ * gayle_defer() runs at the first sysinit, in process context at level 0.
+ * It attaches ide_intr2() at level 2 and self-tests with a real command: the
+ * A4000's INTRQ mirror (0xDD3020 bit 7) cannot be set by an INTREQ raise, so
+ * the driver clears nIEN, issues READ VERIFY SECTOR(S) for one sector at LBA
+ * 0 on the first ATA drive, and waits in one-tick timeout/sleep rounds for
+ * ideintr() to count it.  Pass: interrupt I/O from then on.  Fail: nIEN set
+ * again, the handler detached, polled I/O, and a console line.
+ *
+ * gayle_halt() masks the drive's interrupt (nIEN); it does not flush and does
+ * not wait for a command in flight.
+ * ------------------------------------------------------------------------- */
+
+#ifndef HOST_TEST
+#include	"sys/moddefs.h"		/* the ABI kit's wrapper */
+#include	"sys/amixddi.h"		/* sd_register, root_defer, intr_attach */
+#else
+extern int	sd_register(), root_defer(), intr_attach(), intr_detach();
+#endif
+extern int	bprobe();		/* (caddr_t addr, int v): 0 ok, 1 bus error */
+extern int	sleep();
+extern int	wakeup();
+
+#define IDE_SD_RANK	4		/* C4-1 section 4: class 4 ide = .moddata rank=ide */
+#define IDE_LEVEL	2		/* INT2: PORTS, shared with CIA-A and Zorro II */
+
+/* kmem/getksym-readable state of the module form */
+ulong	ide_halted;			/* the halt pass ran (count) */
+ulong	ide_selftest;			/* 0 not run, 1 passed (interrupt I/O), 2 failed (polled) */
+ulong	ide_selftest_ticks;		/* clock ticks the self-test waited */
+static char	ide_st_chan;		/* the self-test's sleep channel */
+
+/*
+ * One integer parameter from the string the core passes to the load entry:
+ * "name=value ..." (decimal), or 0.  Absent: the default.  A value that is
+ * not a number in [lo, hi] is said and gives the default.
+ */
+static int
+gayle_iparam( params, name, dflt, lo, hi)
+char	*params, *name;
+int	dflt, lo, hi;
+{
+	char	*p, *n;
+	long	v;
+	int	nd;
+
+	if ((p = params) == 0)
+		return dflt;
+	for (;;) {
+		while (*p == ' ')
+			p++;
+		if (*p == 0)
+			return dflt;
+		for (n = name; *n && *p == *n; n++, p++)
+			;
+		if (*n == 0 && *p == '=')
+			break;
+		while (*p && *p != ' ')
+			p++;
+	}
+	for (p++, v = 0, nd = 0; *p >= '0' && *p <= '9'; p++, nd++)
+		v = v <= hi ? v * 10 + (*p - '0') : (long)hi + 1;
+	if (nd == 0 || (*p != 0 && *p != ' ') || v < lo || v > hi) {
+		printf( "ide: parameter %s is not %d to %d; %d taken\n", name, lo, hi, dflt);
+		return dflt;
+	}
+	return (int)v;
+}
+
+/*
+ * The level-2 entry.  ideintr() counts ide_intr_count exactly when the
+ * board's INTRQ mirror showed the interrupt and it took it, so nonzero here
+ * means "ours", as intr_attach() asks.
+ */
+static int
+ide_intr2( arg)
+char	*arg;
+{
+	ulong	before;
+
+	before = ide_intr_count;
+	ideintr();
+	return ide_intr_count != before;
+}
+
+/*
+ * The self-test (process context, level 0, the queue idle: every request
+ * before it was polled and has completed).  Returns 0 when the drive's
+ * interrupt was taken, -1 otherwise; on failure nIEN is set again and the
+ * command's end is waited out polled.
+ */
+static int
+ide_selftest_run()
+{
+	ulong	before, t;
+	int	drive, s, st;
+
+	for (drive = 0; drive < IDE_NDRIVES; ++drive)
+		if (ideunits[drive].present && !ideunits[drive].atapi)
+			break;
+	if (drive == IDE_NDRIVES)
+		return -1;			/* no ATA drive to give READ VERIFY to */
+	s = sdspl();
+	st = ide_select( drive);
+	if (st < 0 || !(st & IDE_ST_DRDY)) {
+		splx( s);
+		return -1;
+	}
+	before = ide_intr_count;
+	ide_st_armed = 1;
+	TW( IDE_REG_CONTROL, 0);		/* nIEN clear: the drive may assert INTRQ */
+	ide_program( drive, IDE_CMD_VERIFY, 0L, 1L);
+	for (t = 0; ide_intr_count == before && t < ide_timeout_secs * HZ; ++t) {
+		/* one tick; at sdspl, so the wakeup cannot come before the sleep */
+		timeout( wakeup, (caddr_t)&ide_st_chan, 1);
+		(void) sleep( (caddr_t)&ide_st_chan, PRIBIO);
+	}
+	ide_st_armed = 0;
+	ide_selftest_ticks = t;
+	if (ide_intr_count != before) {
+		ide_use_intr = 1;
+		ide_irq_enable( ide_bd, 1);
+		splx( s);
+		return 0;
+	}
+	TW( IDE_REG_CONTROL, IDE_CTL_NIEN);
+	st = ide_wait( IDE_ST_BSY, 0, ide_spins);	/* the command's end, polled */
+	if (st < 0)
+		ide_reset_drive();
+	splx( s);
+	return -1;
+}
+
+/* The deferred call (root_defer): attach the interrupt, self-test, decide. */
+static int
+gayle_defer( arg)
+char	*arg;
+{
+	int	e;
+
+	e = intr_attach( IDE_LEVEL, ide_intr2, (char *)0, "gayle");
+	if (e) {
+		ide_selftest = 2;
+		printf( "ide: intr_attach failed (errno %d), polled I/O\n", e);
+		return 0;
+	}
+	if (ide_selftest_run() == 0) {
+		ide_selftest = 1;
+		printf( "ide: %s, interrupt I/O\n", ide_bd->name);
+		return 0;
+	}
+	ide_selftest = 2;
+	(void) intr_detach( IDE_LEVEL, ide_intr2, (char *)0);
+	printf( "ide: interrupt self-test failed, polled I/O\n");
+	return 0;
+}
+
+/* The load entry, in the root pass (see the block comment above). */
+int
+gayle_load( params)
+char	*params;
+{
+	ushort	vposr;
+	int	e, i;
+
+	ide_intr_enable  = gayle_iparam( params, "intr", 0, 0, 1);
+	ide_slave_enable = gayle_iparam( params, "slave", 0, 0, 2);
+	ide_debug        = gayle_iparam( params, "debug", 0, 0, 2);
+	ide_master_unit  = gayle_iparam( params, "master", 6, 0, 7);
+	ide_slave_unit   = gayle_iparam( params, "slaveunit", 5, 0, 7);
+
+	vposr = RW( IDE_VPOSR_ADDR);
+	if (!IDE_VPOSR_IS_AGA( vposr))
+		return ENXIO;
+	if (bprobe( (caddr_t)(ideboards[0].base + IDE_REG_ALTSTAT), -1) != 0)
+		return ENXIO;
+	if (!ide_readback( &ideboards[0]))
+		return ENXIO;
+	ide_bd = &ideboards[0];
+	ide_state = 2;
+	ide_attach();
+	for (i = 0; i < IDE_NDRIVES; ++i)
+		if (ideunits[i].present)
+			break;
+	if (i == IDE_NDRIVES) {
+		idereset();
+		return ENXIO;
+	}
+	e = sd_register( idequeue, 0, (char *)ide_bd->base, ide_bd->name, IDE_SD_RANK);
+	if (e) {
+		printf( "ide: sd_register failed (errno %d)\n", e);
+		idereset();
+		return e;
+	}
+	printf( "ide: %s at 0x%x, polled I/O\n", ide_bd->name, (int)ide_bd->base);
+	if (ide_intr_enable) {
+		e = root_defer( gayle_defer, (char *)0);
+		if (e)
+			printf( "ide: root_defer failed (errno %d), polled I/O\n", e);
+	}
+	return 0;
+}
+
+/*
+ * The core calls this only when a load fails after gayle_load() returned 0:
+ * mask the drive and forget the probe.
+ */
+int
+gayle_unload()
+{
+	if (ide_bd)
+		TW( IDE_REG_CONTROL, IDE_CTL_NIEN);
+	idereset();
+	return 0;
+}
+
+/* The halt pass: mask the drive's interrupt (nIEN).  No flush, no wait. */
+void
+gayle_halt()
+{
+	ide_halted++;
+	if (ide_bd == 0)
+		return;
+	TW( IDE_REG_CONTROL, IDE_CTL_NIEN);
+	ide_irq_enable( ide_bd, 0);
+}
+
+#ifndef HOST_TEST
+/* unload=never: a root-class module is pinned */
+MOD_HDRV_WRAPPER(gayle, gayle_load, gayle_unload, gayle_halt, "A4000 Gayle IDE");
+#endif
+#endif	/* IDE_MODULE */
