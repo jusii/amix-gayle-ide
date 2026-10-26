@@ -1,0 +1,26 @@
+# gayle: its .moddata keys (amix-dlm C3-1 section 3, C4-2 section 1) and the
+# definition line, as the ABI kit's mkmod reads a Master.  One Master for both
+# lines: no $cpu, the kit's fragment gives the line's (68030 on k30, 68040 on
+# k46); kabi and cc come from the kit.
+# $class root: loaded by the core's root pass before the root is mounted; a
+# root-class module is never unloaded ($unload never).
+# $match mobo:gayle: the registered motherboard probe; gayle_load's own gated
+# probe decides (VPOSR AGA gate, bprobe of ALTSTAT, task-file readback).
+# $rank ide: sd's class 4 (C4-1 section 4), the argument gayle_load passes to
+# sd_register.  No $majors: sd owns the disk majors.
+# $modtype misc: MOD_HDRV_WRAPPER, no switch-table slot.
+# Parameters (the static driver's per-kernel tunables): intr 1 = attach INT2
+# after the self-test (default polled); slave 0 never touch the slave, 1 any
+# drive, 2 ATAPI only; debug 0..2; master/slaveunit the SCSI unit numbers.
+$modtype misc
+$class root
+$match mobo:gayle
+$rank ide
+$unload never
+$param intr:int:0:0:1
+$param slave:int:0:0:2
+$param debug:int:0:0:2
+$param master:int:6:0:7
+$param slaveunit:int:5:0:7
+$desc A4000 Gayle IDE, root-class disk controller
+gayle	gayle
