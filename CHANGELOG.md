@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-27 — the `gayle` root-class loadable module (2252428, 03465f8, ac1075e, ef60811)
+
+-DIDE_MODULE turns src/ide.c into module `gayle` (module/: Makefile on amix-dlm's ABI kit, Master, VERSION 1.1.0-1). Load:
+VPOSR AGA gate → bprobe ALTSTAT 0xDD303A → task-file readback → polled IDENTIFY → sd_register rank ide; silent ENXIO with no
+Gayle or no drive; intr=1 (default 0) attaches INT2 via root_defer with a READ VERIFY self-test; _halt sets nIEN; no A1200/A600
+rows, 0xDE1000 never touched; counters global. modcheck ok k30.1.2 (11964 B, 5092db6f) and k46.1.2 (12740 B, d2699c2d);
+static objects unchanged (k30 af0ef514, k46 bdcd9072). New host tests ide_modtest 157 checks per build, mutation-checked;
+harness 1253/1576 unchanged. Shipping waits on S4-71's bprobe row. Package rows gayle30/gayle46 proposed.
+
 ## 2026-10-27 — docs: the plan for the root-class kernel module port (1820e85, 4918016)
 
 docs/module-form.md (2026-10-21, what the driver needs as a loadable module) and docs/MODULE-PORT.md (the plan under the
