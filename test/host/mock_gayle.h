@@ -73,6 +73,7 @@ extern int			mock_irq_latch;		/* A1200/A600 INTREQ bit 7 */
 extern unsigned char		mock_intena;		/* A1200/A600 INTENA register */
 extern unsigned long		mock_irq_acks;		/* acknowledge writes seen */
 extern unsigned long		mock_id_reads;		/* Gayle ID register reads */
+extern unsigned long		mock_id_writes;		/* Gayle ID register writes */
 extern unsigned long		mock_srst_count;	/* software resets seen (SRST set) */
 
 /* CPU-side model (IDE_CACHE build): see mock_gayle.c */

@@ -68,3 +68,15 @@ bracket is balanced) and a `printf()` that records the driver's console output.
   and invalidated before the transfer and a read's again after it, nothing outside the buffer, the
   TTR cache-inhibit check on five DTT shapes, no task-file read ahead of an unsynchronised write
   (asserted after every request), the ×4 spin budgets.
+- The root-class module form (`-DIDE_MODULE`, `ide_modtest` and `ide_modtest_040`, from
+  `ide_modtest.c`, which mocks `bprobe`, `sd_register`, `root_defer`, `intr_attach`/`intr_detach`
+  and `sleep`/`wakeup`): the probe order (one VPOSR read, then `bprobe` of ALTSTAT `0xDD303A`, then
+  the task-file readback, no command before IDENTIFY); a silent, unregistered `ENXIO` on OCS/ECS,
+  an A3000, a `bprobe` bus error, an empty port and an A1200-shaped machine; the registration
+  (`idequeue`, card 0, `0xDD2020`, `"A4000 IDE"`, rank 4) and polled requests through it; no spl,
+  timeout or sleep in the load entry; the parameters (defaults, overrides, bad values); `intr=1`:
+  `root_defer`, `intr_attach` at level 2, one READ VERIFY, interrupt I/O on a pass, polled with nIEN
+  set and the handler detached on a mute drive, a refused attach or an ATAPI-only cable;
+  `sd_register` and `root_defer` errors; `_halt` (nIEN, no command) and `_unload`; and **no access
+  to the Gayle ID register `0xDE1000` on any module path** (`mock_id_reads` + `mock_id_writes`
+  summed over every case).

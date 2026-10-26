@@ -41,7 +41,7 @@ int			mock_board = MOCK_BOARD_A4000;
 unsigned short		mock_vposr_value;
 int			mock_vposr_override;
 unsigned long		mock_accesses, mock_bad_accesses, mock_taskfile_accesses, mock_slave_selects;
-unsigned long		mock_cmd_count[256], mock_irq_acks, mock_id_reads;
+unsigned long		mock_cmd_count[256], mock_irq_acks, mock_id_reads, mock_id_writes;
 unsigned long		mock_srst_count;
 int			mock_last_cmd = -1;
 int			mock_cmd_log[64];
@@ -123,7 +123,7 @@ mock_reset()
 	mock_cacr = 0x80008000L;
 	memset( mock_cmd_count, 0, sizeof mock_cmd_count);
 	mock_accesses = mock_bad_accesses = mock_taskfile_accesses = mock_slave_selects = 0;
-	mock_irq_acks = mock_id_reads = 0;
+	mock_irq_acks = mock_id_reads = mock_id_writes = 0;
 	mock_last_cmd = -1;
 	mock_srst_count = 0;
 	mock_cmd_log_n = 0;
@@ -793,6 +793,7 @@ unsigned char	v;
 {
 	mock_accesses++;
 	if (addr == GAYLE_ID) {
+		mock_id_writes++;
 		id_cnt = 0;
 		return;
 	}
