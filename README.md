@@ -61,7 +61,7 @@ login works. To my knowledge the first Amix boot on an A4000 with root on IDE.
   through amix-kerntools, boots on an A3000 profile (probe silent) and the Amiberry A4000/AGA profile.
 - ✅ **Host harness** — the unmodified driver source against a mock Gayle/ATA model with an ATAPI
   CD-ROM, built twice: the 68030 object (1253 checks) and the 68040/68060 one (1576 checks, cache
-  and ordering included); the loadable module form the same two ways (230 checks each).
+  and ordering included); the loadable module form the same two ways (239 checks each).
 - 🟡 **Board table** — A4000 entry proven; A1200/A600 entries (task file `0xDA0000`, latched INTREQ,
   Gayle ID register) follow NetBSD/Amiberry and are untested. They are never auto-detected: select
   one with `ide_board_force` (2 = A1200, 3 = A600), which is the only time the Gayle ID register at
@@ -154,36 +154,42 @@ holds no `0xDE1000`.
 | | |
 |---|---|
 | `.moddata` | `name=gayle`, `class=root`, `match=mobo:gayle`, `rank=ide`, `unload=never`, no `majors` (sd owns the disk majors); `cpu` and `kabi` from the kit |
-| Parameters | `intr` (0: polled, the default; 1: interrupts after a self-test), `slave` (0/1/2 as `ide_slave_enable`), `debug` (0–2), `master` (6) and `slaveunit` (5), the SCSI unit numbers |
+| Parameters | `intr` (1: interrupts after a self-test, the default; 0: polled), `slave` (0/1/2 as `ide_slave_enable`), `debug` (0–2), `master` (6) and `slaveunit` (5), the SCSI unit numbers |
 | Load | VPOSR AGA gate, then `bprobe` of the alternate status register `0xDD303A`, then the task-file write/readback (parameter registers only, no command); polled IDENTIFY; `sd_register(idequeue, 0, 0xDD2020, "A4000 IDE", 4)`. No drive, or no Gayle: `ENXIO`, silently, and no card is taken |
-| Interrupts | with `intr=1`, at the first `sysinit`: `intr_attach` at level 2 and a self-test by one READ VERIFY SECTOR(S); polled if it fails |
+| Interrupts | by default (`intr=1`), at the first `sysinit`: `intr_attach` at level 2 and a self-test by one READ VERIFY SECTOR(S); polled if it fails or if no ATA drive is attached. Until then, and with `intr=0`, every command is polled |
 | Halt | sets nIEN; no flush |
 | Not in the module | the A1200/A600 rows (the Gayle ID register `0xDE1000` is never touched), the `int2_tbl` search, `idepresent()` |
 
-The package ships the module with interrupts off on both lines; its `/etc/conf/modreg.d/gayle` line
-`param intr=1` turns them on. The counters (`ide_spins_hw`, `ide_resets`, `ide_intr_*`, `ideunits`, …)
+Interrupt I/O is the default on both lines from 1.1.0-3, and the package sets no parameter. To run
+polled, put the line `param intr=0` in `/etc/conf/modreg.local.d/gayle`, then `kbootset build` and
+`kbootset commit`; removing the line goes back to interrupts. The counters (`ide_spins_hw`, `ide_resets`, `ide_intr_*`, `ideunits`, …)
 are global symbols of the module, so `getksym` finds them at the module's load address.
 
-**Tested** (module 1.1.0-1 in emulation, amiberry `ide=a4000`, on the 68060 module kernel kern46m
-k46.1.2 -80 and the 68030 one kern30m k30.1.2 -15, runs N111–N116 and N117–N122; host harness
-`ide_modtest`, 230 checks per line):
+**Tested** in emulation (amiberry `ide=a4000`), on the 68060 module kernel kern46m and the 68030 one
+kern30m; host harness `ide_modtest`, 239 checks per line. Module 1.1.0-3 (interrupt I/O by default) on
+kern46m k46.1.2 -82 and kern30m k30.1.2 -17, installed with apkg, runs N111i–N116i and N117i–N122i:
 
 | Row | What | Result |
 |---|---|---|
-| 1 | IDE root alone, `c6d0`, polled, then `intr=1` | passed on both lines; the first run of the interrupt path on a 68040/68060 kernel: the self-test passes, tens of thousands of interrupts, none spurious |
-| 2 | IDE + Z3660 SCSI: the IDE port as card 1, root by identity | passed on both lines |
-| 3 | the A3000 profile: one VPOSR read, `ENXIO`, the boot otherwise unchanged | passed on both lines |
-| 4 | ATAPI CD-ROM on the slave (`param slave=2`, unit 5) | the drive attaches (`ide1: UAE-ATAPI, ATAPI CD-ROM`) and every request for unit 5 goes to it as a PACKET command (`ide_atapi_cmds` +16 for 16 reads). The row's check, `dd if=/dev/rdsk/c5d0s0 bs=2048 count=16`, is not a CD read: `dd.c` addresses in 512-byte blocks, so it asks for LBA 0, 4, … 60, count 4, and the 2048-byte drive answers its own blocks 0, 4, … 60, 8 KiB each, of which the first 2 KiB are stored (`ide_atapi_overrun` +6144 per read). Its `sum -r`, 64611, is exactly that: the first 2 KiB of the test ISO's blocks 0, 4, … 60. No driver change; the host harness now pins this (polled and interrupt driven). The CD check is `mount -F cdfs 0,5 /cdrom` (see Hardware notes) |
-| 5 | halt and reboot with `intr=1` | passed on both lines |
-| 6 | safe mode with an IDE root | passed on both lines |
+| 1 | IDE root alone, `c6d0`, no parameters; then `param intr=0`; then the line removed again | passed on both lines: by default the self-test passes, then interrupt I/O (27 000–66 000 interrupts per boot, no timeouts, no resets); with `intr=0` no self-test and no interrupts, polled I/O; back to interrupts after the line is removed |
+| 2 | IDE + Z3660 SCSI: the IDE port as card 1, root by identity (`ced0s1`) | passed on both lines, interrupt I/O |
+| 3 | the A3000 profile: one VPOSR read, `ENXIO`, the boot otherwise unchanged | passed on both lines: the module is not loaded |
+| 4 | ATAPI CD-ROM on the slave (`param slave=2`, unit 5) with the cdfs module | passed on both lines: the ATA master's self-test passes; `mount -F cdfs 0,5 /cdrom`, and every file's `sum -r` matches the test ISO; 1716 PACKET commands, 0 resets |
+| 5 | halt and reboot (every row boots 2–4 times; the halt pass runs at each shutdown) | passed on both lines |
+| 6 | safe mode with an IDE root | passed on both lines: the safe boot loads only gayle, with interrupt I/O |
 
-Row 1 on the 68030 line also showed the boot-time page-crossing note (Hardware notes,
+Each copy test (`cp` of the kernel twice with `sync`, `cmp`) matched. In 5 of 24 counter samples, one
+interrupt arrived while no command was waiting; it was counted (`ide_intr_spurious`) and ignored. The
+`intr=1` runs of 1.1.0-1 showed the same (1 of 26 samples). Row 4's raw read, before the cdfs check: the
+row first used `dd if=/dev/rdsk/c5d0s0 bs=2048 count=16`, which is not a CD read: `dd.c` addresses in
+512-byte blocks, so the 2048-byte drive answers its own blocks 0, 4, … 60 (Hardware notes). The first
+module rows (1.1.0-1, `intr` 0 by default, runs N111–N122) passed the same six rows polled and with
+`intr=1`. Row 1 on the 68030 line also showed the boot-time page-crossing note (Hardware notes,
 `ide_pagecross_n`); from 1.1.0-2 the module counts it and prints it only with `param debug=1`.
 
 **Not tested yet:**
-- the module on real hardware; the A4000 rows on hardware come after emulation;
-- row 4 with a cdfs mount of the CD in emulation;
-- `bprobe` in the root pass (level 7, the clock stopped) has run in emulation only, on both lines.
+- the module on real hardware: the A4000 rows, with interrupts by default, are a 1.1 release gate;
+- the interrupt path on a 68040/68060 on real hardware (the static 040/060 line was polled only).
 
 ## Hardware notes
 

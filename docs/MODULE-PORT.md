@@ -32,7 +32,7 @@ object stays byte for byte as it is (z3660scsi's rule). A new `module/` director
 **`.moddata`** (C4-2 §1, `C4-2:25-40`; §8 row `:141`): `name=gayle`, `$modtype misc`
 (`MOD_HDRV_WRAPPER`, no switch slot), `class=root`, `match=mobo:gayle` (in `abi/registry/mobo`),
 `rank=ide`, `unload=never`, no `majors`. The parameters replace the patched symbols:
-`intr:int:0:0:1`, `slave:int:0:0:2`, `debug:int:0:0:2`, `master:int:6:0:7`, `slaveunit:int:5:0:7`.
+`intr:int:1:0:1` (0 until 1.1.0-2, §7 question 1), `slave:int:0:0:2`, `debug:int:0:0:2`, `master:int:6:0:7`, `slaveunit:int:5:0:7`.
 
 **`gayle_load(params)`** runs in `marc_root`: level 7, the clock stopped, no sleep (C4-2 §2,
 `:42-68`). In order:
@@ -143,12 +143,14 @@ identity.
 
 | Module | Short name | pkginst k30 / k46 | Catalog | Version |
 |---|---|---|---|---|
-| gayle | `gayle` | `gayle30` / `gayle46` | `gayle-k30` / `gayle-k46` | `module/VERSION`, `1.1.0-2` |
+| gayle | `gayle` | `gayle30` / `gayle46` | `gayle-k30` / `gayle-k46` | `module/VERSION`, `1.1.0-3` |
 
 The package ships `/etc/conf/mod.d/gayle` and `/etc/conf/modreg.d/gayle`. It ships no device nodes,
 because sd owns the disk majors. C3-5 v9 §1.1 carries the row (`gayle | gayle | gayle30 / gayle46`).
-The package's `modreg.d/gayle` ships with interrupts off on both lines; turning them on is the line
-`param intr=1` there (C3-5 §1's `param <pname>=<value>`) and a package version bump.
+Up to 1.1.0-2 the package's `modreg.d/gayle` shipped with interrupts off on both lines. From 1.1.0-3
+the module's own default is `intr=1` (§7 question 1), and the package sets no parameter. The polled
+switch is the administrator's line `param intr=0` in `/etc/conf/modreg.local.d/gayle` (C3-5 §1's
+`param <pname>=<value>`), followed by `kbootset build` and `commit`.
 
 ## 6. Test plan
 
@@ -187,6 +189,10 @@ The package's `modreg.d/gayle` ships with interrupts off on both lines; turning 
       volume descriptor, `\001CD001`);
    5. a halt and reboot with `intr=1` — **passed**;
    6. safe mode with an IDE root — **passed**.
+
+   Re-run with 1.1.0-3 (interrupt I/O by default) on kern46m -82 and kern30m -17, installed with apkg
+   (runs N111i–N116i, N117i–N122i): all six rows **passed** on both lines with no parameter set; row 1
+   also with `param intr=0` (polled, no self-test) and back. Row 4 used the cdfs mount as its CD check.
 3. **Real hardware, after emulation:** an A4000 with a 060 card (polled, then the first `intr=1`
    run on 040/060), and on a 68030 for the interrupt path.
 
@@ -195,7 +201,10 @@ The package's `modreg.d/gayle` ships with interrupts off on both lines; turning 
 amix-dlm accepted all seven recommendations (contracts C3-5 v9 and C3-6 v5), with these amendments,
 which the code follows:
 - **1:** the module default is 0. The switch is the package's `modreg.d/gayle` line `param intr=1`
-  (not `gayle.intr`), and it ships off on both lines for now.
+  (not `gayle.intr`), and it ships off on both lines for now. **Changed 2026-10-27 (owner, workspace
+  T-54 item 21): interrupt I/O is the 1.1 default.** From 1.1.0-3 `intr` defaults to 1 on both lines,
+  and polled I/O is the local line `param intr=0`. The A4000 hardware rows with interrupts are a 1.1
+  release gate.
 - **2:** the proof is that no module path accesses `0xDE1000`: a host test sums the mock's Gayle ID
   reads and writes over every case, and `make -C module` scans each linked module for the constant.
 - **3:** the readback is the registered `mobo:gayle` identifying probe, allowed only after the VPOSR
