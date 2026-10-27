@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-27 — gayle module 1.1.0-3: interrupt I/O is the default on both lines (a17f353, b2935fc)
+
+`param intr=0` in modreg.local.d selects polled. Rows 1–6 re-run in emulation on kern46m -82 / kern30m -17, all passed, including
+polled via intr=0 and a cdfs mount of the ATAPI CD. Module objects k30 e465bb12, k46 5c8d7d64; static objects unchanged.
+
 ## 2026-10-27 — gayle module 1.1.0-2: a page-crossing request is counted, not printed; the ATAPI raw-read finding explained (a8414f9, 1961515, 07c63ae)
 
 The k30 console line `ide: raw request of 512 bytes crosses a page boundary` on every boot was sdpart.c's static RDB buffer at
