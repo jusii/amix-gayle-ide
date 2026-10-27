@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-27 — gayle module 1.1.0-2: a page-crossing request is counted, not printed; the ATAPI raw-read finding explained (a8414f9, 1961515, 07c63ae)
+
+The k30 console line `ide: raw request of 512 bytes crosses a page boundary` on every boot was sdpart.c's static RDB buffer at
+page offset 0x6cc of a 2 KiB page (no crossing on k46's 4 KiB pages) — a physically contiguous kernel static, harmless; the module
+now counts it (ide_pagecross_n) and prints only with param debug=1. The Bench's row-4 finding was the instrument: stock dd.c
+hard-codes 512-byte blocks into READ(10), so `dd bs=2048` of an ATAPI unit asks LBA 4N and keeps the first 2 KiB of each 8 KiB
+answer — the bytes ARE the CD's (sum 64611 = the ISO's blocks 0,4,8,…), ide_atapi_cmds went 0 → 16 (the before-sample was read);
+the real CD check is `mount -F cdfs`. Host: ATAPI-slave cases + the quiet crossing, ide_modtest 157 → 230; static objects unchanged.
+
 ## 2026-10-27 — the `gayle` root-class loadable module (2252428, 03465f8, ac1075e, ef60811)
 
 -DIDE_MODULE turns src/ide.c into module `gayle` (module/: Makefile on amix-dlm's ABI kit, Master, VERSION 1.1.0-1). Load:
