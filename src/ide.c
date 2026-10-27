@@ -2140,7 +2140,8 @@ idereset()
  * is mounted, at LEVEL 7 WITH THE CLOCK STOPPED.  So it sleeps on nothing,
  * sets no timeout, waits for no interrupt, allocates nothing (the driver's
  * state is its own .data/.bss) and every wait is a bounded spin.  In order:
- *   1. the parameters (defaults: polled, no slave, units 6 and 5);
+ *   1. the parameters (defaults: interrupts after the self-test, no slave,
+ *      units 6 and 5; intr=0 is polled I/O);
  *   2. the chipset gate: one VPOSR read; anything but AGA Alice is ENXIO
  *      after that single read (an A3000 is never touched further);
  *   3. the guard: bprobe() reads the alternate status register (0xDD303A),
@@ -2151,7 +2152,7 @@ idereset()
  *   5. the attach: polled IDENTIFY of the master (and the slave if `slave'
  *      asks for it); no drive that answers it is ENXIO as well;
  *   6. sd_register(idequeue, 0, 0xDD2020, "A4000 IDE", 4);
- *   7. with intr=1, root_defer(gayle_defer, 0).
+ *   7. with intr=1 (the default), root_defer(gayle_defer, 0).
  * ENXIO is silent and leaves nothing behind: an empty A4000T port takes no
  * card.  The Gayle ID register at 0xDE1000 lies in Gary space on the A3000
  * and A4000 and is never touched: the module has no A1200/A600 rows.
@@ -2320,7 +2321,7 @@ char	*params;
 	ushort	vposr;
 	int	e, i;
 
-	ide_intr_enable  = gayle_iparam( params, "intr", 0, 0, 1);
+	ide_intr_enable  = gayle_iparam( params, "intr", 1, 0, 1);
 	ide_slave_enable = gayle_iparam( params, "slave", 0, 0, 2);
 	ide_debug        = gayle_iparam( params, "debug", 0, 0, 2);
 	ide_master_unit  = gayle_iparam( params, "master", 6, 0, 7);

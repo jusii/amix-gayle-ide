@@ -10,14 +10,15 @@
 # sd_register.  No $majors: sd owns the disk majors.
 # $modtype misc: MOD_HDRV_WRAPPER, no switch-table slot.
 # Parameters (the static driver's per-kernel tunables): intr 1 = attach INT2
-# after the self-test (default polled); slave 0 never touch the slave, 1 any
-# drive, 2 ATAPI only; debug 0..2; master/slaveunit the SCSI unit numbers.
+# after the self-test (the default), 0 = polled I/O; slave 0 never touch the
+# slave, 1 any drive, 2 ATAPI only; debug 0..2; master/slaveunit the SCSI
+# unit numbers.
 $modtype misc
 $class root
 $match mobo:gayle
 $rank ide
 $unload never
-$param intr:int:0:0:1
+$param intr:int:1:0:1
 $param slave:int:0:0:2
 $param debug:int:0:0:2
 $param master:int:6:0:7

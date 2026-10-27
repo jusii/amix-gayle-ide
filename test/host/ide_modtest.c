@@ -13,7 +13,7 @@
  *     and on an A1200-shaped machine;
  *   - the registration: sd_register(idequeue, 0, 0xDD2020, "A4000 IDE", 4),
  *     polled requests through it;
- *   - intr: default 0 (no root_defer); intr=1 defers; the deferred call
+ *   - intr: default 1 (root_defer); intr=0 polled, no root_defer; the deferred call
  *     attaches at level 2 and self-tests with one READ VERIFY: pass ->
  *     interrupt I/O, a mute drive or a refused attach -> polled, nIEN set,
  *     the handler detached;
@@ -438,7 +438,7 @@ test_register_polled()
 	CHECK( (unsigned long)sr_base == 0xDD2020L, "base 0xDD2020");
 	CHECK( sr_name && strcmp( sr_name, "A4000 IDE") == 0, "name A4000 IDE");
 	CHECK( sr_rank == 4, "rank 4 (ide)");
-	CHECK( rd_calls == 0, "intr default 0: no root_defer");
+	CHECK( rd_calls == 1 && rd_fn != 0, "intr default 1: root_defer called");
 	CHECK( strstr( mock_console, "ide0: MOCK CF CARD 2GB") != 0, "attach line printed");
 	CHECK( strstr( mock_console, "ide: A4000 IDE at 0xdd2020, polled I/O") != 0, "polled banner");
 	CHECK( mock_spl_calls == 0, "the load entry takes no spl (the root pass stays at level 7)");
@@ -461,21 +461,34 @@ test_params()
 	fresh( 2);
 	e = gayle_load( "debug=0 slave=1 master=4 slaveunit=3");
 	CHECK( e == 0, "params: loads");
-	CHECK( ide_slave_enable == 1 && ide_master_unit == 4 && ide_slave_unit == 3 && ide_intr_enable == 0,
-	    "params taken");
+	CHECK( ide_slave_enable == 1 && ide_master_unit == 4 && ide_slave_unit == 3 && ide_intr_enable == 1,
+	    "params taken, intr by default");
 	CHECK( mock_cmd_count[0xEC] == 2 && mock_slave_selects > 0, "slave=1: both drives identified");
 
 	fresh( 1);
 	e = gayle_load( "intr=7 slave=x master=9");
 	CHECK( e == 0, "bad params: loads with the defaults");
-	CHECK( ide_intr_enable == 0 && ide_slave_enable == 0 && ide_master_unit == 6, "bad params: defaults");
-	CHECK( strstr( mock_console, "ide: parameter intr is not 0 to 1; 0 taken") != 0, "bad intr said");
+	CHECK( ide_intr_enable == 1 && ide_slave_enable == 0 && ide_master_unit == 6, "bad params: defaults");
+	CHECK( strstr( mock_console, "ide: parameter intr is not 0 to 1; 1 taken") != 0, "bad intr said");
 	CHECK( strstr( mock_console, "ide: parameter master is not 0 to 7; 6 taken") != 0, "bad master said");
-	CHECK( rd_calls == 0, "bad intr: no root_defer");
+	CHECK( rd_calls == 1, "bad intr: the default, root_defer");
+
+	fresh( 1);
+	e = gayle_load( "intr=0");
+	CHECK( e == 0 && ide_intr_enable == 0, "intr=0: loads polled");
+	CHECK( rd_calls == 0, "intr=0: no root_defer");
+	CHECK( mock_nien == 1, "intr=0: nIEN set");
+	CHECK( strstr( mock_console, "ide: A4000 IDE at 0xdd2020, polled I/O") != 0, "intr=0: polled banner");
 
 	fresh( 1);
 	e = gayle_load( "");
-	CHECK( e == 0 && ide_intr_enable == 0 && ide_master_unit == 6 && ide_slave_unit == 5, "empty string: defaults");
+	CHECK( e == 0 && ide_intr_enable == 1 && ide_master_unit == 6 && ide_slave_unit == 5, "empty string: defaults");
+	CHECK( rd_calls == 1, "empty string: root_defer (interrupts by default)");
+
+	fresh( 1);
+	e = load_intr( (char *)0);
+	CHECK( e == 0 && ide_selftest == 1 && mock_nien == 0, "no params: the self-test passes, interrupt I/O");
+	CHECK( strstr( mock_console, "ide: A4000 IDE, interrupt I/O") != 0, "no params: interrupt banner");
 	CHECK( mock_id_reads + mock_id_writes == 0, "0xDE1000 untouched");
 }
 
