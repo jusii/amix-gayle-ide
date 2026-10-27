@@ -61,7 +61,7 @@ login works. To my knowledge the first Amix boot on an A4000 with root on IDE.
   through amix-kerntools, boots on an A3000 profile (probe silent) and the Amiberry A4000/AGA profile.
 - ✅ **Host harness** — the unmodified driver source against a mock Gayle/ATA model with an ATAPI
   CD-ROM, built twice: the 68030 object (1253 checks) and the 68040/68060 one (1576 checks, cache
-  and ordering included).
+  and ordering included); the loadable module form the same two ways (230 checks each).
 - 🟡 **Board table** — A4000 entry proven; A1200/A600 entries (task file `0xDA0000`, latched INTREQ,
   Gayle ID register) follow NetBSD/Amiberry and are untested. They are never auto-detected: select
   one with `ide_board_force` (2 = A1200, 3 = A600), which is the only time the Gayle ID register at
@@ -164,12 +164,26 @@ The package ships the module with interrupts off on both lines; its `/etc/conf/m
 `param intr=1` turns them on. The counters (`ide_spins_hw`, `ide_resets`, `ide_intr_*`, `ideunits`, …)
 are global symbols of the module, so `getksym` finds them at the module's load address.
 
+**Tested** (module 1.1.0-1 in emulation, amiberry `ide=a4000`, on the 68060 module kernel kern46m
+k46.1.2 -80 and the 68030 one kern30m k30.1.2 -15, runs N111–N116 and N117–N122; host harness
+`ide_modtest`, 230 checks per line):
+
+| Row | What | Result |
+|---|---|---|
+| 1 | IDE root alone, `c6d0`, polled, then `intr=1` | passed on both lines; the first run of the interrupt path on a 68040/68060 kernel: the self-test passes, tens of thousands of interrupts, none spurious |
+| 2 | IDE + Z3660 SCSI: the IDE port as card 1, root by identity | passed on both lines |
+| 3 | the A3000 profile: one VPOSR read, `ENXIO`, the boot otherwise unchanged | passed on both lines |
+| 4 | ATAPI CD-ROM on the slave (`param slave=2`, unit 5) | the drive attaches (`ide1: UAE-ATAPI, ATAPI CD-ROM`) and every request for unit 5 goes to it as a PACKET command (`ide_atapi_cmds` +16 for 16 reads). The row's check, `dd if=/dev/rdsk/c5d0s0 bs=2048 count=16`, is not a CD read: `dd.c` addresses in 512-byte blocks, so it asks for LBA 0, 4, … 60, count 4, and the 2048-byte drive answers its own blocks 0, 4, … 60, 8 KiB each, of which the first 2 KiB are stored (`ide_atapi_overrun` +6144 per read). Its `sum -r`, 64611, is exactly that: the first 2 KiB of the test ISO's blocks 0, 4, … 60. No driver change; the host harness now pins this (polled and interrupt driven). The CD check is `mount -F cdfs 0,5 /cdrom` (see Hardware notes) |
+| 5 | halt and reboot with `intr=1` | passed on both lines |
+| 6 | safe mode with an IDE root | passed on both lines |
+
+Row 1 on the 68030 line also showed the boot-time page-crossing note (Hardware notes,
+`ide_pagecross_n`); from 1.1.0-2 the module counts it and prints it only with `param debug=1`.
+
 **Not tested yet:**
-- the module has run only in the host harness (`make -C test/host check`), not in an emulator or on
-  hardware; the A4000 rows on the emulator come first, then real hardware;
-- the interrupt path has never run on a 68040/68060 kernel: the static driver there is polled only;
-- `bprobe` in the root pass (level 7, the clock stopped) waits on amix-dlm's root-context check
-  (C4-2 §2); the module must not ship before that check passes on both lines.
+- the module on real hardware; the A4000 rows on hardware come after emulation;
+- row 4 with a cdfs mount of the CD in emulation;
+- `bprobe` in the root pass (level 7, the clock stopped) has run in emulation only, on both lines.
 
 ## Hardware notes
 
@@ -189,12 +203,15 @@ are global symbols of the module, so `getksym` finds them at the module's load a
   `ide_resets` counts them), so a drive still executing the abandoned command cannot complete it into
   the next request's buffer. A drive that stays busy through the reset fails each request without
   hanging the kernel.
-- `ide_pagecross_n` counts raw requests (one page or less) whose buffer straddles a page boundary, and logs
-  the first. It fires once on every boot: the partition layer (`sdpart.c`) reads the RDB and partition
-  blocks 512 bytes at a time into a static kernel buffer (`block`, 512 bytes in the kernel's bss) that
-  happens to sit across a 2 KB boundary in the linked kernel. A kernel static is physically contiguous,
-  so nothing needs splitting; the counter exists for raw I/O from user pages, where the second page is
-  not guaranteed to follow the first.
+- `ide_pagecross_n` counts raw requests (one page or less) whose buffer straddles a page boundary; the
+  static driver logs the first, the module only with `param debug=1`. Where it fires, it fires once per
+  boot on root mount: the partition layer (`sdpart.c`) reads the RDB and partition blocks 512 bytes at
+  a time into a static kernel buffer (`block`, 512 bytes in the kernel's bss), and whether that buffer
+  sits across a page boundary depends on the kernel's link. In the 68030 module kernel kern30m -15 it
+  is at page offset `0x6cc` and crosses the 2 KB page; in the 68060 one, kern46m -80, it sits at
+  `0xdbc` of a 4 KB page and does not. A kernel static is physically contiguous, so nothing needs
+  splitting. Raw I/O from user pages reaches the driver already split at page boundaries (`dd.c`'s
+  `breakup` through `amiga_dma_pageio`), so the counter is a diagnostic, not a hazard seen so far.
 - **ATAPI CD-ROM.** On the slave with `ide_slave_enable` 2 (or 1) it is SCSI unit 5 of the IDE
   card; with a cdfs-capable kernel, `mount -F cdfs <card>,5 /cdrom` mounts it (card 0 where the IDE
   port is the only controller, card 1 below the Z3660 on the 68040/68060 line). Every CDB
@@ -204,7 +221,10 @@ are global symbols of the module, so `getksym` finds them at the module's load a
   timeout). The data moves in the DRQ phases the drive chooses; bytes beyond the caller's `nbyte`
   are drained, not stored (`ide_atapi_overrun` counts them), so a 512-byte `dd.c` read of a
   2048-byte CD block cannot overrun its buffer. `/dev/dsk` is not the way to a CD: `dd.c` expects
-  512-byte blocks and an RDB. Polled ATAPI waits allow `ide_spins_atapi` iterations per phase (a
+  512-byte blocks and an RDB. A raw read of `/dev/rdsk/c5d0s0` does reach the drive, but `dd.c` puts
+  the byte offset / 512 in the LBA field and the length / 512 in the count, so the drive returns its
+  block `offset / 512` (2048 bytes per block asked) and only the first `nbyte` are kept: the bytes
+  are the CD's, at the wrong addresses. Polled ATAPI waits allow `ide_spins_atapi` iterations per phase (a
   disc spinning up); interrupt-driven ones are bounded by the `ide_timeout_secs` watchdog. A polled
   command ends only in the status phase (BSY and DRQ clear with IREASON = CoD|IO): Amiberry's model
   shows BSY and DRQ clear for a moment before the data phase, and a device that never sets CoD|IO at

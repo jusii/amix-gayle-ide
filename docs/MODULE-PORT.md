@@ -135,7 +135,7 @@ identity.
 |---|---|---|
 | Flags | as the static `ide.o` | `-DIDE_CACHE=1 -DIDE_NBPP=4096`; spin budgets ×4 (`:256-262`) |
 | kabi | `k30.1.2` | `k46.1.2` |
-| Interrupt path | proven on a real A4000/030 and in emulation (README "Status") | **never run**: the static line was polled only. `intr=1` there is new code |
+| Interrupt path | proven on a real A4000/030 and in emulation (README "Status") | the static line was polled only; the module's `intr=1` first ran in emulation (§6.2 row 1), not yet on hardware |
 | Register cache check | none | `ide_ci_check()` at attach (`:438-457`): the arena runs through DTT0 like the static drivers (C4-2 §6) |
 | Root-pass level | 7 on both (C4-2 §2) | same |
 
@@ -143,7 +143,7 @@ identity.
 
 | Module | Short name | pkginst k30 / k46 | Catalog | Version |
 |---|---|---|---|---|
-| gayle | `gayle` | `gayle30` / `gayle46` | `gayle-k30` / `gayle-k46` | `module/VERSION`, `1.1.0-1` |
+| gayle | `gayle` | `gayle30` / `gayle46` | `gayle-k30` / `gayle-k46` | `module/VERSION`, `1.1.0-2` |
 
 The package ships `/etc/conf/mod.d/gayle` and `/etc/conf/modreg.d/gayle`. It ships no device nodes,
 because sd owns the disk majors. C3-5 v9 §1.1 carries the row (`gayle | gayle | gayle30 / gayle46`).
@@ -159,16 +159,34 @@ The package's `modreg.d/gayle` ships with interrupts off on both lines; turning 
    - `sd_register` errors passed back;
    - `root_defer` with `intr` 0 and 1;
    - the self-test passing and failing, ending polled with nIEN set;
-   - `_halt` sets nIEN on the A4000 row.
+   - `_halt` sets nIEN on the A4000 row;
+   - an ATAPI CD-ROM on the slave (`slave=2`, unit 5), polled and with interrupts: one PACKET per
+     request with the caller's CDB, never an ATA command; a `dd.c`-shaped raw read (512-byte LBAs)
+     of the 2048-byte drive returns the drive's own blocks `offset / 512`, the rest drained;
+   - a page-crossing request: counted, said only with `debug=1`.
 
    Both binaries, 0 failures.
-2. **Emulation, A4000 IDE model** (amiberry, `ide=a4000`), each on the 030 and the 060 kernel:
-   - IDE root alone: `c6d0`, polled, then `intr=1`;
-   - IDE + Z3660 SCSI: IDE becomes card 1, `ced0`, root by identity;
-   - the A3000 profile: one VPOSR read, `ENXIO`, the boot otherwise unchanged;
-   - ATAPI on the slave (`slave=2`);
-   - a halt and reboot with `intr=1`;
-   - safe mode with an IDE root.
+2. **Emulation, A4000 IDE model** (amiberry, `ide=a4000`), each on the 030 and the 060 kernel. Run
+   with 1.1.0-1 on kern30m k30.1.2 -15 and kern46m k46.1.2 -80:
+   1. IDE root alone: `c6d0`, polled, then `intr=1` — **passed** on both lines (on k46 the first
+      run of the interrupt path: self-test passed, no spurious interrupts). On k30 every boot also
+      printed `ide: raw request of 512 bytes crosses a page boundary` at root mount: `sdpart.c`'s
+      static RDB buffer sits at page offset `0x6cc` in that kernel (`0xdbc` of a 4 KiB page on
+      k46, no crossing). A kernel static is physically contiguous, so the request is safe; 1.1.0-2
+      counts it (`ide_pagecross_n`) and prints it only with `debug=1`;
+   2. IDE + Z3660 SCSI: IDE becomes card 1, `ced0`, root by identity — **passed** on both lines;
+   3. the A3000 profile: one VPOSR read, `ENXIO`, the boot otherwise unchanged — **passed**;
+   4. ATAPI on the slave (`slave=2`) — the drive attaches as unit 5 and takes every request for it
+      as a PACKET command (`ide_atapi_cmds` +16 for 16 reads, both lines). The row's
+      `dd if=/dev/rdsk/c5d0s0 bs=2048 count=16` is not a CD read: `dd.c` sends the byte offset / 512
+      as the LBA and the length / 512 as the count, so the 2048-byte drive returned its blocks 0, 4,
+      … 60, 8 KiB each, the first 2 KiB of each stored and 6 KiB drained (`ide_atapi_overrun`
+      98304). `sum -r` 64611 is exactly the test ISO's blocks 0, 4, … 60, first 2 KiB each. No driver
+      defect; the CD check for the row is `mount -F cdfs 0,5 /cdrom` and a file's checksum (or, as a
+      quick look, `dd if=/dev/rdsk/c5d0s0 bs=512 skip=16 count=1`: the first 512 bytes of the
+      volume descriptor, `\001CD001`);
+   5. a halt and reboot with `intr=1` — **passed**;
+   6. safe mode with an IDE root — **passed**.
 3. **Real hardware, after emulation:** an A4000 with a 060 card (polled, then the first `intr=1`
    run on 040/060), and on a 68030 for the interrupt path.
 
