@@ -1953,7 +1953,15 @@ struct sdcom	*cp;
 		}
 		if ((ulong)cp->nbyte <= IDE_NBPP
 		    && (((ulong)data ^ ((ulong)data + cp->nbyte - 1)) & ~(IDE_NBPP - 1))) {
+#ifdef IDE_MODULE
+			/* counted, said only with debug: the one crossing seen at
+			 * boot is sdpart.c's RDB read into a kernel static, which
+			 * is physically contiguous (README, Hardware notes) */
+			ide_pagecross_n++;
+			if (ide_debug)
+#else
 			if (ide_pagecross_n++ == 0 || ide_debug)
+#endif
 				printf( "ide: raw request of %d bytes crosses a page boundary\n", cp->nbyte);
 		}
 		if (nblk == 0 || lba >= u->nsectors || nblk > u->nsectors - lba) {
