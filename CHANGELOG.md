@@ -9,7 +9,7 @@ polled via intr=0 and a cdfs mount of the ATAPI CD. Module objects k30 e465bb12,
 
 The k30 console line `ide: raw request of 512 bytes crosses a page boundary` on every boot was sdpart.c's static RDB buffer at
 page offset 0x6cc of a 2 KiB page (no crossing on k46's 4 KiB pages) — a physically contiguous kernel static, harmless; the module
-now counts it (ide_pagecross_n) and prints only with param debug=1. The Bench's row-4 finding was the instrument: stock dd.c
+now counts it (ide_pagecross_n) and prints only with param debug=1. Row 4's raw-read finding was the test itself: stock dd.c
 hard-codes 512-byte blocks into READ(10), so `dd bs=2048` of an ATAPI unit asks LBA 4N and keeps the first 2 KiB of each 8 KiB
 answer — the bytes ARE the CD's (sum 64611 = the ISO's blocks 0,4,8,…), ide_atapi_cmds went 0 → 16 (the before-sample was read);
 the real CD check is `mount -F cdfs`. Host: ATAPI-slave cases + the quiet crossing, ide_modtest 157 → 230; static objects unchanged.
@@ -21,7 +21,7 @@ VPOSR AGA gate → bprobe ALTSTAT 0xDD303A → task-file readback → polled IDE
 Gayle or no drive; intr=1 (default 0) attaches INT2 via root_defer with a READ VERIFY self-test; _halt sets nIEN; no A1200/A600
 rows, 0xDE1000 never touched; counters global. modcheck ok k30.1.2 (11964 B, 5092db6f) and k46.1.2 (12740 B, d2699c2d);
 static objects unchanged (k30 af0ef514, k46 bdcd9072). New host tests ide_modtest 157 checks per build, mutation-checked;
-harness 1253/1576 unchanged. Shipping waits on S4-71's bprobe row. Package rows gayle30/gayle46 proposed.
+harness 1253/1576 unchanged. Shipping waits on amix-dlm's root-context bprobe row. Package rows gayle30/gayle46 proposed.
 
 ## 2026-10-27 — docs: the plan for the root-class kernel module port (1820e85, 4918016)
 
@@ -40,11 +40,11 @@ pc = load base + 0x12A, vector 0xB in pid 1), as a tester's FPU-less A1200 card 
 ## 2026-10-11 — real-hardware docs: VPOSR id, the 040/060 line, ATAPI CD read (880ec5c..815e182)
 
 VPOSR id 0x23 confirmed on a real PAL A4000; the 68040/68060 line on a real A4000 with a Z3660 060; an ATAPI CD-ROM
-read on real hardware. PR branches pr/1..7 carry the upstream series with the A4000D evidence (R1..R7).
+read on real hardware. PR branches pr/1..7 carry the upstream series with the results from a real A4000.
 
 ## 2026-10-03 — ATAPI polled commands end only in the status phase (e2c7122..32c0420)
 
-A polled PACKET command is complete only when the status phase is reached; carried into the KT-40 carriers.
+A polled PACKET command is complete only when the status phase is reached; carried into the kernels the build hub assembles.
 
 ## 2026-10-02 — 68040/68060 build variant; ATAPI CD-ROM (d19812b, 70e768e)
 
@@ -55,13 +55,13 @@ A polled PACKET command is complete only when the status phase is reached; carri
 - **ATAPI CD-ROM:** detection by signature and IDENTIFY PACKET DEVICE, CDB passthrough as PACKET commands
   (polled and interrupt-driven), the drive's own sense for REQUEST SENSE, READ(6)/WRITE(6) -> (10), overrun
   drain; `ide_slave_enable` 2 attaches an ATAPI slave only (default 0 unchanged). Mock ATAPI drive in the
-  harness (1197 + 1511 checks). Emulator: K030-U-CD mounts an ATAPI CD on the Gayle slave via cdfs, 22/22
+  harness (1197 + 1511 checks). Emulator: a 68030 kernel mounts an ATAPI CD on the Gayle slave via cdfs, 22/22
   files byte-identical over 5 rounds, including under CF write load.
 
 ## 2026-09-29 (amigaux.org fork)
 
 - **README:** a run-level change requested over telnet while the console sits at `login:` stalls in stock
-  init (GI-1, reproduced without the driver); request it from a console root shell (f80390d).
+  init (reproduced without the driver); request it from a console root shell (f80390d).
 
 - **README:** the boot-time page-cross line is sdpart's static RDB buffer, not a driver defect (f130a69).
 

@@ -1,6 +1,6 @@
 # amix-gayle-ide — native Amix IDE driver for the Amiga 4000's onboard Gayle port
 
-> **Fork notice.** This is the amigaux.org workspace's working fork of
+> **Fork notice.** This is the amigaux.org project's working fork of
 > [hmlio/amix-gayle-ide](https://github.com/hmlio/amix-gayle-ide) by Emre Bastuz, adopted 2026-09-29
 > for the v1.1 installer line (`upstream` = his repository, `origin` = this fork). Changes here keep
 > his layout and naming, one topic per commit, and are meant to go back upstream once the driver is
@@ -167,7 +167,7 @@ are global symbols of the module, so `getksym` finds them at the module's load a
 
 **Tested** in emulation (amiberry `ide=a4000`), on the 68060 module kernel kern46m and the 68030 one
 kern30m; host harness `ide_modtest`, 239 checks per line. Module 1.1.0-3 (interrupt I/O by default) on
-kern46m k46.1.2 -82 and kern30m k30.1.2 -17, installed with apkg, runs N111i–N116i and N117i–N122i:
+kern46m k46.1.2 -82 and kern30m k30.1.2 -17, installed with apkg:
 
 | Row | What | Result |
 |---|---|---|
@@ -183,7 +183,7 @@ interrupt arrived while no command was waiting; it was counted (`ide_intr_spurio
 `intr=1` runs of 1.1.0-1 showed the same (1 of 26 samples). Row 4's raw read, before the cdfs check: the
 row first used `dd if=/dev/rdsk/c5d0s0 bs=2048 count=16`, which is not a CD read: `dd.c` addresses in
 512-byte blocks, so the 2048-byte drive answers its own blocks 0, 4, … 60 (Hardware notes). The first
-module rows (1.1.0-1, `intr` 0 by default, runs N111–N122) passed the same six rows polled and with
+module rows (1.1.0-1, `intr` 0 by default) passed the same six rows polled and with
 `intr=1`. Row 1 on the 68030 line also showed the boot-time page-crossing note (Hardware notes,
 `ide_pagecross_n`); from 1.1.0-2 the module counts it and prints it only with `param debug=1`.
 
@@ -229,7 +229,7 @@ module rows (1.1.0-1, `intr` 0 by default, runs N111–N122) passed the same six
   2048-byte CD block cannot overrun its buffer. `/dev/dsk` is not the way to a CD: `dd.c` expects
   512-byte blocks and an RDB. A raw read of `/dev/rdsk/c5d0s0` does reach the drive, but `dd.c` puts
   the byte offset / 512 in the LBA field and the length / 512 in the count, so the drive returns its
-  block `offset / 512` (2048 bytes per block asked) and only the first `nbyte` are kept: the bytes
+  block `offset / 512` (2048 bytes per block requested) and only the first `nbyte` are kept: the bytes
   are the CD's, at the wrong addresses. Polled ATAPI waits allow `ide_spins_atapi` iterations per phase (a
   disc spinning up); interrupt-driven ones are bounded by the `ide_timeout_secs` watchdog. A polled
   command ends only in the status phase (BSY and DRQ clear with IREASON = CoD|IO): Amiberry's model

@@ -190,8 +190,8 @@ switch is the administrator's line `param intr=0` in `/etc/conf/modreg.local.d/g
    5. a halt and reboot with `intr=1` — **passed**;
    6. safe mode with an IDE root — **passed**.
 
-   Re-run with 1.1.0-3 (interrupt I/O by default) on kern46m -82 and kern30m -17, installed with apkg
-   (runs N111i–N116i, N117i–N122i): all six rows **passed** on both lines with no parameter set; row 1
+   Re-run with 1.1.0-3 (interrupt I/O by default) on kern46m -82 and kern30m -17, installed with apkg:
+   all six rows **passed** on both lines with no parameter set; row 1
    also with `param intr=0` (polled, no self-test) and back. Row 4 used the cdfs mount as its CD check.
 3. **Real hardware, after emulation:** an A4000 with a 060 card (polled, then the first `intr=1`
    run on 040/060), and on a 68030 for the interrupt path.
@@ -201,15 +201,15 @@ switch is the administrator's line `param intr=0` in `/etc/conf/modreg.local.d/g
 amix-dlm accepted all seven recommendations (contracts C3-5 v9 and C3-6 v5), with these amendments,
 which the code follows:
 - **1:** the module default is 0. The switch is the package's `modreg.d/gayle` line `param intr=1`
-  (not `gayle.intr`), and it ships off on both lines for now. **Changed 2026-10-27 (owner, workspace
-  T-54 item 21): interrupt I/O is the 1.1 default.** From 1.1.0-3 `intr` defaults to 1 on both lines,
+  (not `gayle.intr`), and it ships off on both lines for now. **Changed 2026-10-27: interrupt I/O is
+  the 1.1 default.** From 1.1.0-3 `intr` defaults to 1 on both lines,
   and polled I/O is the local line `param intr=0`. The A4000 hardware rows with interrupts are a 1.1
   release gate.
 - **2:** the proof is that no module path accesses `0xDE1000`: a host test sums the mock's Gayle ID
   reads and writes over every case, and `make -C module` scans each linked module for the constant.
 - **3:** the readback is the registered `mobo:gayle` identifying probe, allowed only after the VPOSR
   gate and the `bprobe` guard of ALTSTAT `0xDD303A`, in that order; parameter registers only.
-- **4:** `bprobe` at level 7 with the clock stopped is amix-dlm's root-context row (S4-71, C4-2 §2).
+- **4:** `bprobe` at level 7 with the clock stopped is amix-dlm's root-context row (C4-2 §2).
   The module is built and emulated meanwhile; shipping waits on that row.
 - **5:** `ENXIO`, silent and unlinked, bounded by the static driver's own spin budget.
 - **6:** `_halt` masks (nIEN) only; no flush in v1.
