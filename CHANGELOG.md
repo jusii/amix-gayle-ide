@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-31 — docs: the same facts without internal ids or run numbers (13ef41e)
+
+README, CHANGELOG, docs/MODULE-PORT.md and docs/module-form.md reworded; text only, no build input changed.
+
 ## 2026-10-27 — gayle module 1.1.0-3: interrupt I/O is the default on both lines (a17f353, b2935fc)
 
 `param intr=0` in modreg.local.d selects polled. Rows 1–6 re-run in emulation on kern46m -82 / kern30m -17, all passed, including
