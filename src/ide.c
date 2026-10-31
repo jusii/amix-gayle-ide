@@ -99,7 +99,8 @@ extern void	(*int2_tbl[])();	/* master.d/kernel.c, NULL terminated */
  * the low 1 GB is identity mapped through the transparent translation
  * registers), so the driver dereferences plain addresses.  Cache inhibition
  * of these ranges on the 68030 rests on the stock kernel's transparent-
- * translation setup; on the 68040/68060 line DTT0 (0x003fc060, pstart040.s)
+ * translation setup (works on the real A4000; the TT0/TT1 CI bits are not
+ * read back there); on the 68040/68060 line DTT0 (0x003fc060, pstart040.s)
  * covers them cache-inhibited for supervisor data, which an IDE_CACHE build
  * checks at attach (see "68040/68060 data cache" below).
  */
